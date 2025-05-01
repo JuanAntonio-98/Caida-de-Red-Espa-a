@@ -3,16 +3,21 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 
 # Cargar CSV
+
 df = pd.read_csv("apagón_datos.csv", sep=";", encoding="utf-8")
 df['Hora'] = pd.to_datetime(df['Hora'], format='%H:%M')
 
-# Fuentes de generación
+# --- CATEGORIZACIÓN DE VARIABLES ---
+
+# Fuentes de generación (producción de energía)
 fuentes = ['Nuclear', 'Carbón', 'Ciclo combinado', 'Cogeneración y Residuos',
            'Hidráulica', 'Solar FV', 'Solar térmica', 'Eólica', 'Turbinación bombeo', 'Térmica renovable']
 
-# Consumos y exportaciones
-otros = ['Consumo bombeo', 'Consumo baterías', 'Baterías', 'Enlace Balear',
-         'Francia exportación', 'Portugal exportación', 'Marruecos exportación', 'Andorra exportación']
+# Almacenamiento y enlace Balear (consumos internos del sistema)
+almacenamiento = ['Consumo bombeo', 'Consumo baterías', 'Baterías', 'Enlace Balear']
+
+# Exportaciones (salida del sistema a otros países)
+exportaciones = ['Francia exportación', 'Portugal exportación', 'Marruecos exportación', 'Andorra exportación']
 
 # Colores para gráficas
 colores = {
@@ -22,8 +27,8 @@ colores = {
     'Turbinación bombeo':'pink', 'Térmica renovable':'Navy'
 }
 
-# Graficar producción por fuente
-plt.figure(figsize=(12, 6))
+# --- GRÁFICO PRODUCCIÓN POR FUENTE ---
+plt.figure(figsize=(14, 7))
 for fuente in fuentes:
     plt.plot(df['Hora'], df[fuente], marker='o', label=fuente, color=colores.get(fuente, 'gray'))
 plt.title("Producción por fuente de energía durante el apagón")
@@ -36,7 +41,7 @@ plt.tight_layout()
 plt.savefig("produccion_apagon.png")
 plt.show()
 
-print("\n--- ANÁLISIS DEL CAMBIO ENTRE 12:30 Y 12:35 ---")
+# --- ANÁLISIS PUNTUAL ENTRE 12:30 Y 12:35 ---
 
 hora1 = datetime.strptime("12:30", "%H:%M")
 hora2 = datetime.strptime("12:35", "%H:%M")
@@ -47,7 +52,7 @@ if not t1.empty and not t2.empty:
     t1 = t1.iloc[0]
     t2 = t2.iloc[0]
 
-    # 1. Tabla de generación
+    print("\n--- VARIACIÓN EN FUENTES DE GENERACIÓN ---")
     diferencias = {}
     total_mw_antes = 0
     total_mw_dif = 0
@@ -72,10 +77,22 @@ if not t1.empty and not t2.empty:
     print("-" * 50)
     print(f"{'Total':<25}{total_mw_dif:>10.0f}{porcentaje_total:>11.1f} %")
 
-    # 2. Gráfica comparación generación vs exportaciones
-    gen_total = df[fuentes].sum(axis=1)
-    export_total = df[['Francia exportación', 'Portugal exportación', 'Marruecos exportación', 'Andorra exportación']].sum(axis=1)
+    # Fuente más afectada
+    fuente_mas_afectada = min(diferencias_ordenadas.items(), key=lambda x: x[1]["MW"])
+    print(f"\nLa fuente más afectada fue: {fuente_mas_afectada[0]} ({fuente_mas_afectada[1]['MW']} MW)")
 
+    # Exportación más afectada
+    export_variaciones = {
+        ex: t2[ex] - t1[ex] for ex in exportaciones
+    }
+    export_mas_afectada = max(export_variaciones.items(), key=lambda x: x[1])
+    print(f"La exportación más afectada fue: {export_mas_afectada[0]} ({export_mas_afectada[1]} MW)")
+
+    # Total generación y total exportaciones
+    gen_total = df[fuentes].sum(axis=1)
+    export_total = df[exportaciones].sum(axis=1)
+
+    # Gráfico de generación vs exportaciones
     plt.figure(figsize=(10, 5))
     plt.plot(df['Hora'], gen_total, marker='o', label='Generación total', color='blue')
     plt.plot(df['Hora'], export_total, marker='o', label='Exportaciones totales', color='red')
@@ -89,66 +106,74 @@ if not t1.empty and not t2.empty:
     plt.savefig("comparacion_gen_exportaciones.png")
     plt.show()
 
+    # --- VARIACIÓN EN ALMACENAMIENTO Y EXPORTACIONES ---
+
+    print("\n--- VARIACIÓN EN ALMACENAMIENTO Y EXPORTACIONES ENTRE 12:30 Y 12:35 ---")
+    otros = almacenamiento + exportaciones
+    variaciones_otros = {}
+    total_mw_otros_antes = 0
+    total_mw_otros_dif = 0
+
+    for fuente in otros:
+        mw_antes = t1[fuente]
+        mw_despues = t2[fuente]
+        diferencia = mw_despues - mw_antes
+        porcentaje = (diferencia / mw_antes * 100) if mw_antes != 0 else 0
+        if diferencia != 0:
+            variaciones_otros[fuente] = {"MW": diferencia, "%": porcentaje}
+        total_mw_otros_antes += mw_antes
+        total_mw_otros_dif += diferencia
+
+    porcentaje_total_otros = (total_mw_otros_dif / total_mw_otros_antes * 100) if total_mw_otros_antes != 0 else 0
+
+    print(f"{'Concepto':<25}{'Δ MW':>10}{'% Cambio':>12}")
+    print("-" * 50)
+    for fuente, datos in variaciones_otros.items():
+        print(f"{fuente:<25}{datos['MW']:>10.0f}{datos['%']:>11.1f} %")
+    print("-" * 50)
+    print(f"{'Total':<25}{total_mw_otros_dif:>10.0f}{porcentaje_total_otros:>11.1f} %")
+
+    # --- VARIACIÓN GLOBAL EXPORTACIONES VS GENERACIÓN ---
+
+    t1_gen_total = t1[fuentes].sum()
+    t2_gen_total = t2[fuentes].sum()
+    t1_exp_total = t1[exportaciones].sum()
+    t2_exp_total = t2[exportaciones].sum()
+
+    variacion_gen = t2_gen_total - t1_gen_total
+    variacion_exp = t2_exp_total - t1_exp_total
+
+    cambio_porc_export_vs_gen = (variacion_exp / variacion_gen * 100) if variacion_gen != 0 else 0
+    print(f"\nCambio porcentual global de exportaciones respecto a generación: {cambio_porc_export_vs_gen:.2f} %")
+
+    # --- DESAJUSTE ENTRE GENERACIÓN Y CONSUMO ---
+
+    demanda_real_t1 = t1['Total demanda real']
+    demanda_real_t2 = t2['Total demanda real']
+
+    consumo_total_t1 = demanda_real_t1 + abs(t1[almacenamiento + exportaciones].sum())
+    consumo_total_t2 = demanda_real_t2 + abs(t2[almacenamiento + exportaciones].sum())
+
+    uso_gen_t1 = consumo_total_t1 / t1_gen_total * 100 if t1_gen_total != 0 else 0
+    uso_gen_t2 = consumo_total_t2 / t2_gen_total * 100 if t2_gen_total != 0 else 0
+
+    print("\n--- USO DE GENERACIÓN TOTAL ---")
+    print(f"A las 12:30: {uso_gen_t1:.2f} % de la generación fue destinada a consumo/exportaciones")
+    print(f"A las 12:35: {uso_gen_t2:.2f} % de la generación fue destinada a consumo/exportaciones")
+
+    # --- GRÁFICO DE PORCENTAJES ENERGÉTICOS ---
+    plt.figure(figsize=(10, 6))
+    etiquetas = fuentes + almacenamiento + exportaciones
+    valores_t1 = [t1[e] for e in etiquetas]
+    total_t1 = sum(valores_t1)
+    porcentajes_t1 = [v / total_t1 * 100 if total_t1 != 0 else 0 for v in valores_t1]
+
+    plt.barh(etiquetas, porcentajes_t1, color='skyblue')
+    plt.title("Distribución porcentual de energía a las 12:30")
+    plt.xlabel("% sobre el total")
+    plt.tight_layout()
+    plt.savefig("porcentajes_energia_1230.png")
+    plt.show()
+
 else:
-    print("❌ No se encontraron registros para una de las horas.")
-
-# --- ANÁLISIS DE VARIACIONES EN CONSUMOS Y EXPORTACIONES ---
-
-
-variaciones_consumo = {}
-total_mw_otros_antes = 0
-total_mw_otros_dif = 0
-
-for fuente in otros:
-    mw_antes = t1[fuente]
-    mw_despues = t2[fuente]
-    diferencia = mw_despues - mw_antes
-    if mw_antes != 0:
-        porcentaje = (diferencia / mw_antes) * 100
-    else:
-        porcentaje = float('inf') if diferencia != 0 else 0
-
-    if diferencia != 0:
-        variaciones_consumo[fuente] = {
-            "MW": diferencia,
-            "%": porcentaje
-        }
-
-    total_mw_otros_antes += mw_antes
-    total_mw_otros_dif += diferencia
-
-porcentaje_total_otros = (total_mw_otros_dif / total_mw_otros_antes) * 100 if total_mw_otros_antes != 0 else 0
-
-print("\n--- VARIACIÓN EN CONSUMO Y EXPORTACIONES ENTRE 12:30 Y 12:35 ---")
-print(f"{'Concepto':<25}{'Δ MW':>10}{'% Cambio':>12}")
-print("-" * 50)
-for fuente, datos in variaciones_consumo.items():
-    print(f"{fuente:<25}{datos['MW']:>10.0f}{datos['%']:>11.1f} %")
-print("-" * 50)
-print(f"{'Total':<25}{total_mw_otros_dif:>10.0f}{porcentaje_total_otros:>11.1f} %")
-
-# --- GRÁFICO COMPARATIVO ENTRE EXPORTACIONES Y GENERACIÓN ---
-t1_gen_total = t1[fuentes].sum()
-t2_gen_total = t2[fuentes].sum()
-t1_exp_total = t1[['Francia exportación', 'Portugal exportación', 'Marruecos exportación', 'Andorra exportación']].sum()
-t2_exp_total = t2[['Francia exportación', 'Portugal exportación', 'Marruecos exportación', 'Andorra exportación']].sum()
-
-variacion_gen = t2_gen_total - t1_gen_total
-variacion_exp = t2_exp_total - t1_exp_total
-
-plt.figure(figsize=(8, 6))
-plt.bar(['Generación', 'Exportaciones'], [variacion_gen, variacion_exp], color=['blue', 'red'])
-plt.title("Variaciones netas entre 12:30 y 12:35")
-plt.ylabel("Δ MW")
-plt.grid(axis='y')
-plt.tight_layout()
-plt.savefig("comparacion_gen_export.png")
-plt.show()
-
-# --- ANÁLISIS PORCENTUAL DE EXPORTACIÓN ---
-porc_export_1230 = (t1_exp_total / t1_gen_total) * 100 if t1_gen_total != 0 else 0
-porc_export_1235 = (t2_exp_total / t2_gen_total) * 100 if t2_gen_total != 0 else 0
-
-print("\n--- PORCENTAJE EXPORTADO RESPECTO A LA GENERACIÓN ---")
-print(f"A las 12:30: {porc_export_1230:.2f} % de la generación fue exportada")
-print(f"A las 12:35: {porc_export_1235:.2f} % de la generación fue exportada")
+    print("\n❌ No se encontraron registros para una de las horas.")
