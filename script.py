@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 
 # Cargar CSV
-
 df = pd.read_csv("apagón_datos.csv", sep=";", encoding="utf-8")
 df['Hora'] = pd.to_datetime(df['Hora'], format='%H:%M')
 
@@ -28,7 +27,7 @@ colores = {
 }
 
 # --- GRÁFICO PRODUCCIÓN POR FUENTE ---
-plt.figure(figsize=(14, 7))
+plt.figure(figsize=(16, 8))  # Aumentado el tamaño del gráfico
 for fuente in fuentes:
     plt.plot(df['Hora'], df[fuente], marker='o', label=fuente, color=colores.get(fuente, 'gray'))
 plt.title("Producción por fuente de energía durante el apagón")
@@ -70,12 +69,12 @@ if not t1.empty and not t2.empty:
     porcentaje_total = (total_mw_dif / total_mw_antes * 100) if total_mw_antes != 0 else 0
     diferencias_ordenadas = dict(sorted(diferencias.items(), key=lambda x: x[1]["MW"]))
 
-    print(f"{'Fuente':<25}{'Δ MW':>10}{'% Cambio':>12}")
+    print("{:<25}{:>10}{:>12}".format("Fuente", "Δ MW", "% Cambio"))
     print("-" * 50)
     for fuente, datos in diferencias_ordenadas.items():
-        print(f"{fuente:<25}{datos['MW']:>10.0f}{datos['%']:>11.1f} %")
+        print("{:<25}{:>10.0f}{:>11.1f} %".format(fuente, datos['MW'], datos['%']))
     print("-" * 50)
-    print(f"{'Total':<25}{total_mw_dif:>10.0f}{porcentaje_total:>11.1f} %")
+    print("{:<25}{:>10.0f}{:>11.1f} %".format("Total", total_mw_dif, porcentaje_total))
 
     # Fuente más afectada
     fuente_mas_afectada = min(diferencias_ordenadas.items(), key=lambda x: x[1]["MW"])
@@ -93,9 +92,13 @@ if not t1.empty and not t2.empty:
     export_total = df[exportaciones].sum(axis=1)
 
     # Gráfico de generación vs exportaciones
-    plt.figure(figsize=(10, 5))
+    plt.figure(figsize=(12, 6))
     plt.plot(df['Hora'], gen_total, marker='o', label='Generación total', color='blue')
     plt.plot(df['Hora'], export_total, marker='o', label='Exportaciones totales', color='red')
+    for x, y in zip(df['Hora'], gen_total):
+        plt.text(x, y, f'{y:.0f}', fontsize=8, ha='right')
+    for x, y in zip(df['Hora'], export_total):
+        plt.text(x, y, f'{y:.0f}', fontsize=8, ha='right')
     plt.title("Comparación de Generación vs Exportaciones")
     plt.xlabel("Hora")
     plt.ylabel("Potencia (MW)")
@@ -126,12 +129,12 @@ if not t1.empty and not t2.empty:
 
     porcentaje_total_otros = (total_mw_otros_dif / total_mw_otros_antes * 100) if total_mw_otros_antes != 0 else 0
 
-    print(f"{'Concepto':<25}{'Δ MW':>10}{'% Cambio':>12}")
+    print("{:<25}{:>10}{:>12}".format("Concepto", "Δ MW", "% Cambio"))
     print("-" * 50)
     for fuente, datos in variaciones_otros.items():
-        print(f"{fuente:<25}{datos['MW']:>10.0f}{datos['%']:>11.1f} %")
+        print("{:<25}{:>10.0f}{:>11.1f} %".format(fuente, datos['MW'], datos['%']))
     print("-" * 50)
-    print(f"{'Total':<25}{total_mw_otros_dif:>10.0f}{porcentaje_total_otros:>11.1f} %")
+    print("{:<25}{:>10.0f}{:>11.1f} %".format("Total", total_mw_otros_dif, porcentaje_total_otros))
 
     # --- VARIACIÓN GLOBAL EXPORTACIONES VS GENERACIÓN ---
 
@@ -157,9 +160,14 @@ if not t1.empty and not t2.empty:
     uso_gen_t1 = consumo_total_t1 / t1_gen_total * 100 if t1_gen_total != 0 else 0
     uso_gen_t2 = consumo_total_t2 / t2_gen_total * 100 if t2_gen_total != 0 else 0
 
+    balance_t1 = t1_gen_total - consumo_total_t1
+    balance_t2 = t2_gen_total - consumo_total_t2
+
     print("\n--- USO DE GENERACIÓN TOTAL ---")
     print(f"A las 12:30: {uso_gen_t1:.2f} % de la generación fue destinada a consumo/exportaciones")
     print(f"A las 12:35: {uso_gen_t2:.2f} % de la generación fue destinada a consumo/exportaciones")
+    print(f"Balance neto a las 12:30: {balance_t1:.0f} MW")
+    print(f"Balance neto a las 12:35: {balance_t2:.0f} MW")
 
     # --- GRÁFICO DE PORCENTAJES ENERGÉTICOS ---
     plt.figure(figsize=(10, 6))
@@ -168,7 +176,10 @@ if not t1.empty and not t2.empty:
     total_t1 = sum(valores_t1)
     porcentajes_t1 = [v / total_t1 * 100 if total_t1 != 0 else 0 for v in valores_t1]
 
-    plt.barh(etiquetas, porcentajes_t1, color='skyblue')
+    barras = plt.barh(etiquetas, porcentajes_t1, color='skyblue')
+    for barra, pct in zip(barras, porcentajes_t1):
+        plt.text(barra.get_width(), barra.get_y() + barra.get_height() / 2, f'{pct:.1f}%', va='center')
+
     plt.title("Distribución porcentual de energía a las 12:30")
     plt.xlabel("% sobre el total")
     plt.tight_layout()
